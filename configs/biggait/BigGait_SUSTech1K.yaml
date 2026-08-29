@@ -3,7 +3,7 @@ data_cfg:
   # TODO
   dataset_root: your_path # use datasets/SUSTech1K/pretreatment_SUSTech1K.py or provided pkl files
   dataset_partition: ./datasets/SUSTech1K/SUSTech1K.json
-  data_in_use: [5, 4] # RGB, ratios HW
+  data_in_use: [1, 0] # RGB, ratios HW
   num_workers: 8
   remove_no_gallery: false # Remove probe if no gallery for it
   test_dataset_name: SUSTech1K
