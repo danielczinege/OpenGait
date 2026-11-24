@@ -18,6 +18,8 @@ parser.add_argument('--phase', default='train',
 parser.add_argument('--log_to_file', action='store_true',
                     help="log to file, default path is: output/<dataset>/<model>/<save_name>/<logs>/<Datetime>.txt")
 parser.add_argument('--iter', default=0, help="iter to restore")
+parser.add_argument('--seed', type=int, default=0,
+                    help="run seed; each process uses seed * 4 + rank (at most 4 GPUs), so 0 keeps the original seeding")
 opt = parser.parse_args()
 
 
@@ -37,7 +39,12 @@ def initialization(cfgs, training):
 
     msg_mgr.log_info(engine_cfg)
 
-    seed = torch.distributed.get_rank()
+    # Distinct runs never share a process seed: seed 0 uses 0..3, seed 1 uses 4..7, ...
+    # The stride is fixed at 4, not the GPU count, so a seed gives rank 0 (the initial
+    # weights and the batch order) the same seed on 1, 2 or 4 GPUs.
+    if torch.distributed.get_world_size() > 4:
+        raise ValueError("--seed assumes at most 4 GPUs, got {}".format(torch.distributed.get_world_size()))
+    seed = opt.seed * 4 + torch.distributed.get_rank()
     init_seeds(seed)
 
 
