@@ -24,6 +24,10 @@ from functools import partial
 
 # ######################################## BiggerGait ###########################################
 
+# BaseRgbTransform's defaults, to find the black pixels in the normalised input
+RGB_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1) * 255
+RGB_STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1) * 255
+
 class infoDistillation(nn.Module):
     def __init__(self, source_dim, target_dim, p, softmax):
         super(infoDistillation, self).__init__()
@@ -190,6 +194,13 @@ class BiggerGait__DINOv2(BaseModel):
                 human_mask, _ = self.Mask_Branch(human_mask.view(-1, self.f4_dim), mse=False)
                 human_mask = (human_mask[:,1] > 0.5).float() # check which is the foreground at first!!!   0 or 1; 50%;
                 human_mask = human_mask.view(n*s, 1, self.image_size//7, self.image_size//14)
+                # The black padding at the sides of narrow crops is background, as in BigGait, which locates it from the crop ratios.
+                # Here it is found in the pixels, and unlike in BigGait the partly black cells at its edge are background too.
+                pixels = rgb_img * RGB_STD.to(rgb_img) + RGB_MEAN.to(rgb_img)
+                black_columns = pixels.amax(dim=(1, 2)) < 0.5  # [n*s, 128]: black over the full height (< 0.5 instead of == 0 to avoid numerical issues when rescaling back)
+                cell_width = black_columns.shape[-1] // human_mask.shape[-1]  # 8 pixel columns per cell column
+                padded_cells = black_columns.view(n*s, -1, cell_width).any(dim=-1)  # [n*s, 16]: cell columns with a black pixel column
+                human_mask = human_mask.masked_fill(padded_cells[:, None, None, :], 0)  # background in all rows of those cell columns
                 human_mask = self.preprocess(human_mask, self.sils_size).detach().clone()
 
             intermediates = [torch.cat(intermediates[i:i+self.group_layer_num], dim=1).contiguous() for i in range(0, self.total_layer_num, self.group_layer_num)]
